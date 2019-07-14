@@ -1,12 +1,38 @@
 package org.openmrs.reference;
 
+import org.apache.catalina.LifecycleState;
+import org.apache.catalina.connector.Connector;
+import org.apache.catalina.startup.Tomcat;
+import org.apache.commons.io.FileUtils;
+import org.apache.coyote.http11.Http11NioProtocol;
+import org.apache.http.Consts;
+import org.apache.tomcat.util.http.fileupload.IOUtils;
 import org.junit.Before;
+import org.junit.Rule;
+import org.junit.rules.ExternalResource;
 import org.openmrs.reference.page.HomePage;
 import org.openmrs.reference.page.ReferenceApplicationLoginPage;
 import org.openmrs.uitestframework.page.LoginPage;
 import org.openmrs.uitestframework.page.Page;
 import org.openmrs.uitestframework.test.TestBase;
 import org.openqa.selenium.By;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.logging.FileHandler;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogManager;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Each test class should extend ReferenceApplicationTestBase.
@@ -45,5 +71,168 @@ public class ReferenceApplicationTestBase extends TestBase {
 	@Override
 	protected LoginPage getLoginPage() {
 		return new ReferenceApplicationLoginPage(driver);
+	}
+
+
+	/*
+	Copied from TomcatBaseTest
+	 */
+	// Embedded tomcat instance
+	private static Tomcat tomcat = null;
+	// Path of the base directory used by Tomcat
+	private static final String tomcatBaseDir = System.getProperty("tomcat.base.directory", "tomcat");
+	// Path of the directory to which web application files are extracted
+	private static final String webAppsBaseDir = System.getProperty("webapps.base.directory", "webapps");
+	// Path of the directory containing war files for the web applications
+	private static final String webAppsWarDir = ".." + File.separator + "experiments" + File.separator + "apache-tomcat-8.0.47" + File.separator + "webapps";
+	// Set of names of the web applications already added to tomcat
+	private static final HashSet<String> addedWebApps = new HashSet<>();
+
+	@Rule
+	public final ExternalResource tomcatResource = new ExternalResource() {
+		@Override
+		protected void before() throws Throwable {
+			if(tomcat == null) {
+				// Setup the embedded server
+				tomcat = new Tomcat();
+				tomcat.setBaseDir(tomcatBaseDir);
+				tomcat.getHost().setAppBase(tomcatBaseDir);
+				String protocol = Http11NioProtocol.class.getName();
+				Connector connector = new Connector(protocol);
+				// Listen on localhost
+				connector.setAttribute("address", InetAddress.getByName("localhost").getHostAddress());
+				// Use a random free port
+				connector.setPort(8080);
+//				connector.setPort(Integer.valueOf(System.getProperty("tomcat.port")));
+				tomcat.getService().addConnector(connector);
+				tomcat.setConnector(connector);
+				tomcat.setSilent(true);
+				tomcat.getHost().setDeployOnStartup(true);
+				tomcat.getHost().setAutoDeploy(true);
+				// Reduce logging
+				System.setProperty("org.apache.commons.logging.Log", "org.apache.commons.logging.impl.NoOpLog");
+				replaceRootLoggerHandlers();
+				tomcat.init();
+				tomcat.start();
+
+				//Deploy the app
+				String warFile = "../package/target/distro/web/openmrs.war";
+				unzipWar(warFile,"openmrs");
+				tomcat.addWebapp("/openmrs" , new File(webAppsBaseDir, "openmrs").getCanonicalPath());
+
+				//Now hit the installation page
+				Thread.sleep(420*1000);
+
+
+				// Add the shutdown hook to stop the embedded server
+				Runnable shutdown = new Runnable() {
+					@Override
+					public void run() {
+						try {
+							try {
+								// Stop and destroy the server
+								if(tomcat.getServer() != null && tomcat.getServer().getState() != LifecycleState.DESTROYED) {
+									if(tomcat.getServer().getState() != LifecycleState.STOPPED) {
+										tomcat.stop();
+									}
+									tomcat.destroy();
+									tomcat = null;
+								}
+							} finally {
+								// Delete tomcat's temporary working directory
+								FileUtils.deleteDirectory(new File(tomcatBaseDir));
+							}
+						} catch(Throwable t) {
+							t.printStackTrace();
+						}
+					}
+				};
+				Runtime.getRuntime().addShutdownHook(new Thread(shutdown));
+			}
+		}
+	};
+
+
+	/* Returns a newly created file handler with the specified logging level that logs to a file in the base tomcat directory. */
+	private static Handler createFileHandler() throws IOException {
+		// Ensure that the base directory exists
+		File baseDirFile = new File(tomcatBaseDir);
+		if(!baseDirFile.isDirectory() && !baseDirFile.mkdirs()) {
+			System.err.println("Failed to make base directory for embedded tomcat.");
+		}
+		Handler fileHandler = new FileHandler(tomcatBaseDir + File.separator + "catalina.out", true);
+		fileHandler.setFormatter(new SimpleFormatter());
+		fileHandler.setLevel(Level.INFO);
+		fileHandler.setEncoding("UTF-8");
+		return fileHandler;
+	}
+
+	/* Removes any existing handlers for the specified logger and adds the specified handler. */
+	private static void replaceRootLoggerHandlers() throws IOException {
+		Logger rootLogger = LogManager.getLogManager().getLogger("");
+		rootLogger.setUseParentHandlers(false);
+		// Change the level of any existing handlers to OFF
+		for(Handler h : rootLogger.getHandlers()) {
+			h.setLevel(Level.OFF);
+		}
+		// Add a file handler for INFO level logging
+		rootLogger.addHandler(createFileHandler());
+	}
+
+	/* If the directory for the web-app with the specified name does not exists creates it by unzipping the war for the
+	 * web-app. */
+	private static void unzipWar(String warFile, String shortName) throws IOException {
+		File dir = new File(webAppsBaseDir, shortName);
+		if(!dir.isDirectory()) {
+			// Unzip war into the directory only if it does not already exists
+			File webAppWar = new File(warFile);
+			if(!webAppWar.isFile()) {
+				throw new RuntimeException("Could not find war file for: " + warFile);
+			}
+			try(ZipFile zipFile = new ZipFile(webAppWar)) {
+				Enumeration<? extends ZipEntry> entries = zipFile.entries();
+				while(entries.hasMoreElements()) {
+					ZipEntry entry = entries.nextElement();
+					File entryDestination = new File(dir, entry.getName());
+					if(entry.isDirectory()) {
+						if(!entryDestination.isDirectory() && !entryDestination.mkdirs()) {
+							throw new RuntimeException("Failed to make directory for: " + entryDestination);
+						}
+						// Add velocity.properties file
+						File velocityPropFile = new File(entryDestination, "velocity.properties");
+						try {
+							org.apache.commons.io.FileUtils.writeStringToFile(velocityPropFile,
+									"runtime.log.logsystem.class=org.apache.velocity.runtime.log.NullLogChute", Consts.UTF_8, false);
+						} catch(Exception e) {
+							//
+						}
+					} else {
+						if(!entryDestination.getParentFile().isDirectory() && !entryDestination.getParentFile().mkdirs()) {
+							throw new RuntimeException("Failed to make directory for: " + entryDestination.getParentFile());
+						}
+						if(entry.getName().endsWith("log4j.properties")) {
+							// Write different logging properties
+							writeLog4JProperties(entryDestination);
+						} else {
+							InputStream in = zipFile.getInputStream(entry);
+							OutputStream out = new FileOutputStream(entryDestination);
+							IOUtils.copy(in, out);
+							IOUtils.closeQuietly(in);
+							out.close();
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/* Writes log4j properties to disable logging to the specified file. */
+	private static void writeLog4JProperties(File file) throws IOException {
+		String content =
+				"log4j.rootLogger=OFF, stdout\n" +
+						"log4j.appender.stdout=org.apache.log4j.ConsoleAppender\n" +
+						"log4j.appender.stdout.layout=org.apache.log4j.SimpleLayout\n";
+		org.apache.commons.io.FileUtils.writeStringToFile(file,
+				content, Consts.UTF_8, false);
 	}
 }
