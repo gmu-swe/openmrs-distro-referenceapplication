@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.openmrs.distro</groupId>
@@ -10,21 +11,22 @@
     <url>http://maven.apache.org</url>
 
     <parent>
-		<groupId>org.openmrs.distro</groupId>
-		<artifactId>referenceapplication</artifactId>
-		<version>2.10.0-SNAPSHOT</version>
-	</parent>
+        <groupId>org.openmrs.distro</groupId>
+        <artifactId>referenceapplication</artifactId>
+        <version>2.10.0-SNAPSHOT</version>
+    </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Remote server -->
-<!--        <webapp.url>https://qa-refapp.openmrs.org/openmrs</webapp.url>-->
+        <!--        <webapp.url>https://qa-refapp.openmrs.org/openmrs</webapp.url>-->
         <!-- Local server -->
-        <webapp.url>http://localhost:${tomcat.port}/openmrs</webapp.url>
+        <!--        <webapp.url>http://localhost:8080/openmrs</webapp.url>-->
+        <!-- now set in surefire config -->
         <login.username>admin</login.username>
         <login.password>Admin123</login.password>
         <webdriver>firefox</webdriver>
-        <tomcat.version>9.0.19</tomcat.version>
+        <tomcat.version>7.0.94</tomcat.version>
     </properties>
 
     <dependencies>
@@ -44,57 +46,32 @@
             <version>${tomcat.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-el</artifactId>
+            <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-websocket</artifactId>
+            <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-logging-juli</artifactId>
+            <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-logging-log4j</artifactId>
+            <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>2.6</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-
-    <profiles>
-        <profile>
-            <id>ci</id>
-
-            <properties>
-                <login.username>admin</login.username>
-                <login.password>Admin123</login.password>
-            </properties>
-
-            <build>
-                <plugins>
-                    <plugin>
-                        <artifactId>maven-failsafe-plugin</artifactId>
-                        <configuration>
-                            <skipTests>false</skipTests>
-                            <groups>org.openmrs.reference.groups.BuildTests</groups>
-                            <forkCount>1</forkCount>
-                            <reuseForks>true</reuseForks>
-                            <systemProperties>
-                                <property>
-                                    <!-- Move derby.log and database to build directory -->
-                                    <name>derby.stream.error.file</name>
-                                    <value>${project.build.directory}/derby.log</value>
-                                </property>
-                                <property>
-                                    <name>derby.system.home</name>
-                                    <value>${project.build.directory}/db</value>
-                                </property>
-                                <property>
-                                    <name>tomcat.base.directory</name>
-                                    <value>${project.build.directory}/tomcat</value>
-                                </property>
-                                <property>
-                                    <name>webapps.base.directory</name>
-                                    <value>${project.build.directory}/webapps</value>
-                                </property>
-                            </systemProperties>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 
     <build>
 
@@ -117,181 +94,98 @@
                 </configuration>
             </plugin>
             <plugin>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <version>2.18.1</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <skipTests>true</skipTests>
-                    <rerunFailingTestsCount>2</rerunFailingTestsCount>
-                    <runOrder>alphabetical</runOrder>
-                    <includes>
-                        <include>**/*.java</include>
-                    </includes>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
                 <configuration>
                     <skip>true</skip>
                 </configuration>
             </plugin>
-
-            <!-- Find a port for mysql to run on-->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>reserve-mysql-port</id>
-                        <goals>
-                            <goal>reserve-network-port</goal>
-                        </goals>
-                        <configuration>
-                            <portNames>
-                                <portName>mysql.port</portName>
-                            </portNames>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>reserve-tomcat-port</id>
-                        <goals>
-                            <goal>reserve-network-port</goal>
-                        </goals>
-                        <configuration>
-                            <portNames>
-                                <portName>tomcat.port</portName>
-                            </portNames>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- Unpack MySQL -->
-            <plugin>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>unpack</goal>
-                        </goals>
-                        <configuration>
-                            <artifactItems>
-                                <artifactItem>
-                                    <groupId>com.jcabi</groupId>
-                                    <artifactId>mysql-dist</artifactId>
-                                    <version>5.6.14</version>
-                                    <classifier>${mysql.classifier}</classifier>
-                                    <type>zip</type>
-                                    <overWrite>false</overWrite>
-                                    <outputDirectory>
-                                        ${project.build.directory}/mysql-dist
-                                    </outputDirectory>
-                                </artifactItem>
-                            </artifactItems>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- start MySQL -->
-            <plugin>
-                <groupId>com.jcabi</groupId>
-                <artifactId>jcabi-mysql-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>mysql-test</id>
-                        <goals>
-                            <goal>classify</goal>
-                            <goal>start</goal>
-                            <goal>stop</goal>
-                        </goals>
-                        <configuration>
-                            <port>${mysql.port}</port>
-                            <data>${project.build.directory}/mysql-data</data>
-                            <socket>/tmp/junit-ifc-mysql.sock</socket>
-                            <options>
-                                <option>default-time-zone=+00:00</option>
-                            </options>
-                            <clearexistingdata>true</clearexistingdata>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- Load in data -->
-            <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>sql-maven-plugin</artifactId>
-            <version>1.5</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>mysql</groupId>
-                        <artifactId>mysql-connector-java</artifactId>
-                        <version>8.0.16</version>
-                    </dependency>
-                </dependencies>
-
-                <configuration>
-                    <driver>com.mysql.jdbc.Driver</driver>
-                    <url>jdbc:mysql://127.0.0.1:${mysql.port}/</url>
-                    <username>root</username>
-                    <password>root</password>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>create-schema</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>execute</goal>
-                        </goals>
-                        <configuration>
-                            <autocommit>true</autocommit>
-                            <srcFiles>
-                                <srcFile>../package/target/distro/dbdump/dump.sql</srcFile>
-                            </srcFiles>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>1.1.1</version>
-                <executions>
-                    <execution>
-                        <id>generate-config-file</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <executable>configureOpenMRS.sh</executable>
-                    <environmentVariables>
-                        <DB_HOST>localhost</DB_HOST>
-                        <DB_DATABASE>openmrs</DB_DATABASE>
-                        <DB_PORT>${mysql.port}</DB_PORT>
-                        <DB_USERNAME>root</DB_USERNAME>
-                        <DB_PASSWORD>root</DB_PASSWORD>
-                    </environmentVariables>
-                </configuration>
-            </plugin>
-
+<!--            &lt;!&ndash; Unpack MySQL &ndash;&gt;-->
+<!--            <plugin>-->
+<!--                <artifactId>maven-dependency-plugin</artifactId>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <goals>-->
+<!--                            <goal>unpack</goal>-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <artifactItems>-->
+<!--                                <artifactItem>-->
+<!--                                    <groupId>com.jcabi</groupId>-->
+<!--                                    <artifactId>mysql-dist</artifactId>-->
+<!--                                    <version>5.6.14</version>-->
+<!--                                    <classifier>${mysql.classifier}</classifier>-->
+<!--                                    <type>zip</type>-->
+<!--                                    <overWrite>false</overWrite>-->
+<!--                                    <outputDirectory>-->
+<!--                                        ${project.build.directory}/mysql-dist-->
+<!--                                    </outputDirectory>-->
+<!--                                </artifactItem>-->
+<!--                            </artifactItems>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
+<!--            &lt;!&ndash; start MySQL &ndash;&gt;-->
+<!--            <plugin>-->
+<!--                <groupId>com.jcabi</groupId>-->
+<!--                <artifactId>jcabi-mysql-maven-plugin</artifactId>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>mysql-test</id>-->
+<!--                        <goals>-->
+<!--                            <goal>classify</goal>-->
+<!--                            <goal>start</goal>-->
+<!--                            <goal>stop</goal>-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <port>${mysql.port}</port>-->
+<!--                            <data>${project.build.directory}/mysql-data</data>-->
+<!--                            <socket>/tmp/junit-ifc-mysql.sock</socket>-->
+<!--                            <options>-->
+<!--                                <option>default-time-zone=+00:00</option>-->
+<!--                            </options>-->
+<!--                            <clearexistingdata>false</clearexistingdata>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <version>2.18.1</version>
                 <configuration>
+                    <skipTests>false</skipTests>
                     <systemPropertyVariables>
-                        <mysql.port>${mysql.port}</mysql.port>
+<!--                        <mysql.port>${mysql.port}</mysql.port>-->
                         <tomcat.port>${tomcat.port}</tomcat.port>
-                        <OPENMRS_APPLICATION_DATA_DIRECTORY>${project.build.directory}/openmrs-data/</OPENMRS_APPLICATION_DATA_DIRECTORY>
-                        <OPENMRS_INSTALLATION_SCRIPT>${project.build.directory}/openmrs-server.properties</OPENMRS_INSTALLATION_SCRIPT>
+                        <webapp.url>http://localhost:${tomcat.port}/openmrs</webapp.url>
                     </systemPropertyVariables>
+                    <groups>org.openmrs.reference.groups.BuildTests</groups>
+                    <includes>
+                        <include>**/*.java</include>
+                    </includes>
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <systemProperties>
+                        <property>
+                            <!-- Move derby.log and database to build directory -->
+                            <name>derby.stream.error.file</name>
+                            <value>${project.build.directory}/derby.log</value>
+                        </property>
+                        <property>
+                            <name>derby.system.home</name>
+                            <value>${project.build.directory}/db</value>
+                        </property>
+                        <property>
+                            <name>tomcat.base.directory</name>
+                            <value>${project.build.directory}/tomcat</value>
+                        </property>
+                        <property>
+                            <name>webapps.base.directory</name>
+                            <value>${project.build.directory}/webapps</value>
+                        </property>
+                    </systemProperties>
                 </configuration>
                 <executions>
                     <execution>
@@ -301,7 +195,9 @@
                         </goals>
                     </execution>
                 </executions>
+
             </plugin>
+
         </plugins>
         <resources>
             <resource>
@@ -310,8 +206,118 @@
             </resource>
         </resources>
     </build>
+    <profiles>
+        <profile>
+            <id>reuse-ports</id>
+            <activation>
+                <property>
+                    <name>mysql.port</name>
+                </property>
+            </activation>
+        </profile>
+<!--        <profile>-->
+<!--            <id>reserve-ports</id>-->
+<!--            <activation>-->
+<!--                <property>-->
+<!--                    <name>!mysql.port</name>-->
+<!--                </property>-->
+<!--            </activation>-->
+<!--            <build>-->
+<!--                <plugins>-->
+<!--                    &lt;!&ndash; Find a port for mysql to run on&ndash;&gt;-->
+<!--                    <plugin>-->
+<!--                        <groupId>org.codehaus.mojo</groupId>-->
+<!--                        <artifactId>build-helper-maven-plugin</artifactId>-->
+<!--                        <executions>-->
+<!--                            <execution>-->
+<!--                                <id>reserve-mysql-port</id>-->
+<!--                                <goals>-->
+<!--                                    <goal>reserve-network-port</goal>-->
+<!--                                </goals>-->
+<!--                                <configuration>-->
+<!--                                    <portNames>-->
+<!--                                        <portName>mysql.port</portName>-->
+<!--                                    </portNames>-->
+<!--                                </configuration>-->
+<!--                            </execution>-->
+<!--                            <execution>-->
+<!--                                <id>reserve-tomcat-port</id>-->
+<!--                                <goals>-->
+<!--                                    <goal>reserve-network-port</goal>-->
+<!--                                </goals>-->
+<!--                                <configuration>-->
+<!--                                    <portNames>-->
+<!--                                        <portName>tomcat.port</portName>-->
+<!--                                    </portNames>-->
+<!--                                </configuration>-->
+<!--                            </execution>-->
+<!--                        </executions>-->
+<!--                    </plugin>-->
+<!--                    &lt;!&ndash; Load in data &ndash;&gt;-->
+<!--                    <plugin>-->
+<!--                        <groupId>org.codehaus.mojo</groupId>-->
+<!--                        <artifactId>sql-maven-plugin</artifactId>-->
+<!--                        <version>1.5</version>-->
+<!--                        <dependencies>-->
+<!--                            <dependency>-->
+<!--                                <groupId>mysql</groupId>-->
+<!--                                <artifactId>mysql-connector-java</artifactId>-->
+<!--                                <version>8.0.16</version>-->
+<!--                            </dependency>-->
+<!--                        </dependencies>-->
 
-   <repositories>
+<!--                        <configuration>-->
+<!--                            <driver>com.mysql.jdbc.Driver</driver>-->
+<!--                            <url>jdbc:mysql://127.0.0.1:${mysql.port}/</url>-->
+<!--                            <username>root</username>-->
+<!--                            <password>root</password>-->
+<!--                        </configuration>-->
+<!--                        <executions>-->
+<!--                            <execution>-->
+<!--                                <id>create-schema</id>-->
+<!--                                <phase>pre-integration-test</phase>-->
+<!--                                <goals>-->
+<!--                                    <goal>execute</goal>-->
+<!--                                </goals>-->
+<!--                                <configuration>-->
+<!--                                    <autocommit>true</autocommit>-->
+<!--                                    <srcFiles>-->
+<!--                                        <srcFile>../package/target/distro/dbdump/dump.sql</srcFile>-->
+<!--                                    </srcFiles>-->
+<!--                                </configuration>-->
+<!--                            </execution>-->
+<!--                        </executions>-->
+<!--                    </plugin>-->
+<!--                    <plugin>-->
+<!--                        <groupId>org.codehaus.mojo</groupId>-->
+<!--                        <artifactId>exec-maven-plugin</artifactId>-->
+<!--                        <version>1.1.1</version>-->
+<!--                        <executions>-->
+<!--                            <execution>-->
+<!--                                <id>generate-config-file</id>-->
+<!--                                <phase>pre-integration-test</phase>-->
+<!--                                <goals>-->
+<!--                                    <goal>exec</goal>-->
+<!--                                </goals>-->
+<!--                            </execution>-->
+<!--                        </executions>-->
+<!--                        <configuration>-->
+<!--                            <executable>configureOpenMRS.sh</executable>-->
+<!--                            <environmentVariables>-->
+<!--                                <DB_HOST>localhost</DB_HOST>-->
+<!--                                <DB_DATABASE>openmrs</DB_DATABASE>-->
+<!--                                <DB_PORT>${mysql.port}</DB_PORT>-->
+<!--                                <DB_USERNAME>root</DB_USERNAME>-->
+<!--                                <DB_PASSWORD>root</DB_PASSWORD>-->
+<!--                            </environmentVariables>-->
+<!--                        </configuration>-->
+<!--                    </plugin>-->
+<!--                </plugins>-->
+<!--            </build>-->
+<!--        </profile>-->
+    </profiles>
+
+    <repositories>
         <repository>
             <id>openmrs-repo</id>
             <name>OpenMRS Nexus Repository</name>

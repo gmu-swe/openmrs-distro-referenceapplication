@@ -6,10 +6,20 @@ import org.apache.catalina.startup.Tomcat;
 import org.apache.commons.io.FileUtils;
 import org.apache.coyote.http11.Http11NioProtocol;
 import org.apache.http.Consts;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.util.EntityUtils;
 import org.apache.tomcat.util.http.fileupload.IOUtils;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.ExternalResource;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.openmrs.reference.page.HomePage;
 import org.openmrs.reference.page.ReferenceApplicationLoginPage;
 import org.openmrs.uitestframework.page.LoginPage;
@@ -23,6 +33,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.logging.FileHandler;
@@ -33,6 +46,8 @@ import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Each test class should extend ReferenceApplicationTestBase.
@@ -50,6 +65,7 @@ import java.util.zip.ZipFile;
  * 10. It is not allowed to call Driver's methods in a page. You should be calling methods provided by the Page superclass.
  *
  */
+@RunWith(Parameterized.class)
 public class ReferenceApplicationTestBase extends TestBase {
 
 	private static final By SELECTED_LOCATION = By.id("selected-location");
@@ -62,6 +78,25 @@ public class ReferenceApplicationTestBase extends TestBase {
 	@Before
 	public void before() throws Exception {
 	    homePage = new HomePage(page);
+	}
+
+
+	@Parameterized.Parameter
+	public String platform;
+	@Parameterized.Parameter(1)
+	public String browser;
+	@Parameterized.Parameter(2)
+	public String browserVersion;
+	private static volatile boolean serverFailure = false;
+
+	@Parameterized.Parameters(
+			name = "{index}: {0} {1} {2}"
+	)
+	public static Collection<Object[]> getBrowsers() {
+//		return Arrays.asList(
+//				new Object[]{"Linux", "Firefox", "42"},
+//				new Object[]{"Linux", "Chrome", "48.0"});
+		return Collections.singletonList(new Object[]{"Linux", "Chrome", "48.0"});
 	}
 
 	public String getLocationUuid(Page page){
@@ -83,8 +118,6 @@ public class ReferenceApplicationTestBase extends TestBase {
 	private static final String tomcatBaseDir = System.getProperty("tomcat.base.directory", "tomcat");
 	// Path of the directory to which web application files are extracted
 	private static final String webAppsBaseDir = System.getProperty("webapps.base.directory", "webapps");
-	// Path of the directory containing war files for the web applications
-	private static final String webAppsWarDir = ".." + File.separator + "experiments" + File.separator + "apache-tomcat-8.0.47" + File.separator + "webapps";
 	// Set of names of the web applications already added to tomcat
 	private static final HashSet<String> addedWebApps = new HashSet<>();
 
@@ -92,65 +125,112 @@ public class ReferenceApplicationTestBase extends TestBase {
 	public final ExternalResource tomcatResource = new ExternalResource() {
 		@Override
 		protected void before() throws Throwable {
-			if(tomcat == null) {
-				// Setup the embedded server
-				tomcat = new Tomcat();
-				tomcat.setBaseDir(tomcatBaseDir);
-				tomcat.getHost().setAppBase(tomcatBaseDir);
-				String protocol = Http11NioProtocol.class.getName();
-				Connector connector = new Connector(protocol);
-				// Listen on localhost
-				connector.setAttribute("address", InetAddress.getByName("localhost").getHostAddress());
-				// Use a random free port
-				connector.setPort(8080);
-//				connector.setPort(Integer.valueOf(System.getProperty("tomcat.port")));
-				tomcat.getService().addConnector(connector);
-				tomcat.setConnector(connector);
-				tomcat.setSilent(true);
-				tomcat.getHost().setDeployOnStartup(true);
-				tomcat.getHost().setAutoDeploy(true);
-				// Reduce logging
-				System.setProperty("org.apache.commons.logging.Log", "org.apache.commons.logging.impl.NoOpLog");
-				replaceRootLoggerHandlers();
-				tomcat.init();
-				tomcat.start();
-
-				//Deploy the app
-				String warFile = "../package/target/distro/web/openmrs.war";
-				unzipWar(warFile,"openmrs");
-				tomcat.addWebapp("/openmrs" , new File(webAppsBaseDir, "openmrs").getCanonicalPath());
-
-				//Now hit the installation page
-				Thread.sleep(420*1000);
-
-
-				// Add the shutdown hook to stop the embedded server
-				Runnable shutdown = new Runnable() {
-					@Override
-					public void run() {
-						try {
-							try {
-								// Stop and destroy the server
-								if(tomcat.getServer() != null && tomcat.getServer().getState() != LifecycleState.DESTROYED) {
-									if(tomcat.getServer().getState() != LifecycleState.STOPPED) {
-										tomcat.stop();
-									}
-									tomcat.destroy();
-									tomcat = null;
-								}
-							} finally {
-								// Delete tomcat's temporary working directory
-								FileUtils.deleteDirectory(new File(tomcatBaseDir));
-							}
-						} catch(Throwable t) {
-							t.printStackTrace();
-						}
-					}
-				};
-				Runtime.getRuntime().addShutdownHook(new Thread(shutdown));
-			}
+//			if(tomcat == null) {
+//				try {
+//					// Setup the embedded server
+//					tomcat = new Tomcat();
+//					tomcat.setBaseDir(tomcatBaseDir);
+//					tomcat.getHost().setAppBase(tomcatBaseDir);
+//					String protocol = Http11NioProtocol.class.getName();
+//					Connector connector = new Connector(protocol);
+//					// Listen on localhost
+//					connector.setAttribute("address", InetAddress.getByName("localhost").getHostAddress());
+//					// Use a random free port
+//					connector.setPort(Integer.valueOf(System.getProperty("tomcat.port")));
+//					tomcat.getService().addConnector(connector);
+//					tomcat.setConnector(connector);
+////				tomcat.setSilent(true);
+//					tomcat.getHost().setDeployOnStartup(true);
+//					tomcat.getHost().setAutoDeploy(true);
+//					// Reduce logging
+////				System.setProperty("org.apache.commons.logging.Log", "org.apache.commons.logging.impl.NoOpLog");
+////				replaceRootLoggerHandlers();
+//					tomcat.enableNaming();
+//					tomcat.init();
+//					tomcat.start();
+//					System.out.println("Tomcat is up!");
+//
+//					//Deploy the app
+//					String warFile = "../package/target/distro/web/openmrs.war";
+//					unzipWar(warFile, "openmrs");
+//					tomcat.addWebapp("/openmrs", new File(webAppsBaseDir, "openmrs").getCanonicalPath());
+//
+//					//Now hit the installation page
+//					waitForInstallation();
+//
+//					// Add the shutdown hook to stop the embedded server
+//					Runnable shutdown = new Runnable() {
+//						@Override
+//						public void run() {
+//							try {
+//								try {
+//									// Stop and destroy the server
+//									if (tomcat.getServer() != null && tomcat.getServer().getState() != LifecycleState.DESTROYED) {
+//										if (tomcat.getServer().getState() != LifecycleState.STOPPED) {
+//											tomcat.stop();
+//										}
+//										tomcat.destroy();
+//										tomcat = null;
+//									}
+//								} finally {
+//									// Delete tomcat's temporary working directory
+//									FileUtils.deleteDirectory(new File(tomcatBaseDir));
+//								}
+//							} catch (Throwable t) {
+//								t.printStackTrace();
+//							}
+//						}
+//					};
+//					Runtime.getRuntime().addShutdownHook(new Thread(shutdown));
+//				} catch (Throwable thr) {
+//					thr.printStackTrace();
+//					throw thr;
+//				}
+//			}
 		}
 	};
+
+	private static final int INSTALL_TIMEOUT = 1000*60*10; //10 minutes
+	private static void waitForInstallation(){
+		long start = System.currentTimeMillis();
+		while(true){
+			long now = System.currentTimeMillis();
+			String status = pingInstallationPage();
+			System.out.println(status);
+			if(status.contains("Enter your username"))
+				return;
+			try {
+				if(now - start > INSTALL_TIMEOUT) {
+					System.err.println(status);
+					throw new IllegalStateException("Application failed to start within timeout, see current status above");
+				}
+				Thread.sleep(1000*60);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	private static String pingInstallationPage(){
+		String result = null;
+		URIBuilder builder =  new URIBuilder()
+				.setScheme("http")
+				.setHost(tomcat.getHost().getName())
+				.setPort(tomcat.getConnector().getLocalPort()).setPath("/openmrs");
+		CloseableHttpClient client = HttpClientBuilder.create().build();
+		try(CloseableHttpResponse response = client.execute(new HttpGet(builder.build()))) {
+			HttpEntity entity = response.getEntity();
+			if(entity != null) {
+				if(entity.getContentLength() != -1 || entity.isChunked()) {
+					result = EntityUtils.toString(entity);
+				}
+			}
+			EntityUtils.consume(entity);
+		} catch(Exception e) {
+			// Exceptions may occur on test reruns
+		}
+		return result;
+
+	}
 
 
 	/* Returns a newly created file handler with the specified logging level that logs to a file in the base tomcat directory. */
